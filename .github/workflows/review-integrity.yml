@@ -7,7 +7,6 @@ on:
     types: [submitted, edited, dismissed]
 
 permissions:
-  checks: write
   pull-requests: read
   contents: read
 
@@ -30,109 +29,45 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const pull_number = pr.number;
-            const head_sha = pr.head.sha;
 
-            // Create check run as in_progress
-            const { data: checkRun } = await github.rest.checks.create({
-              owner, repo,
-              name: 'review-integrity',
-              head_sha,
-              status: 'in_progress',
-              started_at: new Date().toISOString(),
+            // Get committers
+            const committers = new Set();
+            const commits = await github.paginate(github.rest.pulls.listCommits, {
+              owner, repo, pull_number, per_page: 100,
             });
-
-            try {
-              // Get committers
-              const committers = new Set();
-              const commits = await github.paginate(github.rest.pulls.listCommits, {
-                owner, repo, pull_number, per_page: 100,
-              });
-              for (const commit of commits) {
-                if (commit.author?.login) committers.add(commit.author.login);
-                if (commit.committer?.login && commit.committer.login !== 'web-flow') {
-                  committers.add(commit.committer.login);
-                }
+            for (const commit of commits) {
+              if (commit.author?.login) committers.add(commit.author.login);
+              if (commit.committer?.login && commit.committer.login !== 'web-flow') {
+                committers.add(commit.committer.login);
               }
+            }
 
-              // Get approvals (later reviews override earlier ones per user)
-              const approvals = new Map();
-              const reviews = await github.paginate(github.rest.pulls.listReviews, {
-                owner, repo, pull_number, per_page: 100,
-              });
-              for (const review of reviews) {
-                const login = review.user?.login;
-                if (!login) continue;
-                if (review.state === 'APPROVED') {
-                  approvals.set(login, 'APPROVED');
-                } else if (review.state === 'DISMISSED' || review.state === 'CHANGES_REQUESTED') {
-                  approvals.delete(login);
-                }
+            // Get approvals (later reviews override earlier ones per user)
+            const approvals = new Map();
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+              owner, repo, pull_number, per_page: 100,
+            });
+            for (const review of reviews) {
+              const login = review.user?.login;
+              if (!login) continue;
+              if (review.state === 'APPROVED') {
+                approvals.set(login, 'APPROVED');
+              } else if (review.state === 'DISMISSED' || review.state === 'CHANGES_REQUESTED') {
+                approvals.delete(login);
               }
+            }
 
-              // Check for violations: approvers who are also committers
-              const violators = [...approvals.keys()].filter(u => committers.has(u));
+            // Check for violations: approvers who are also committers
+            const violators = [...approvals.keys()].filter(u => committers.has(u));
 
-              let conclusion, summary, text;
-
-              if (violators.length > 0) {
-                conclusion = 'failure';
-                summary = `Blocked: ${violators.length} approval(s) from committers`;
-                text = [
-                  'The following users have both committed to this PR and approved it, which is not allowed:\n',
-                  ...violators.map(u => `- **@${u}** — committed and approved`),
-                  '\nA PR must be approved by someone who has **not** committed to the branch.',
-                  '\n### Committers on this PR',
-                  ...[...committers].map(u => `- @${u}`),
-                  '\n### Current approvals',
-                  ...(approvals.size > 0
-                    ? [...approvals.keys()].map(u =>
-                        violators.includes(u) ? `- ~~@${u}~~ (invalid — is a committer)` : `- @${u}`)
-                    : ['_No approvals_']),
-                ].join('\n');
-              } else {
-                conclusion = 'success';
-                summary = approvals.size > 0
-                  ? `Passed: ${approvals.size} valid approval(s) from non-committers`
-                  : 'Passed: No committer has approved (awaiting review from a non-committer)';
-                text = [
-                  '### Committers on this PR',
-                  ...[...committers].map(u => `- @${u}`),
-                  '\n### Current approvals',
-                  ...(approvals.size > 0
-                    ? [...approvals.keys()].map(u => `- @${u}`)
-                    : ['_No approvals yet — waiting for a non-committer to review_']),
-                  '\nAll approvals are from non-committers.',
-                ].join('\n');
-              }
-
-              await github.rest.checks.update({
-                owner, repo,
-                check_run_id: checkRun.id,
-                status: 'completed',
-                conclusion,
-                completed_at: new Date().toISOString(),
-                output: {
-                  title: conclusion === 'success'
-                    ? 'Review integrity: OK'
-                    : 'Review integrity: committer cannot approve',
-                  summary,
-                  text,
-                },
-              });
-
-              core.info(`Check ${conclusion} for ${owner}/${repo}#${pull_number}`);
-            } catch (error) {
-              await github.rest.checks.update({
-                owner, repo,
-                check_run_id: checkRun.id,
-                status: 'completed',
-                conclusion: 'failure',
-                completed_at: new Date().toISOString(),
-                output: {
-                  title: 'Review integrity: error',
-                  summary: 'An error occurred while evaluating review integrity.',
-                  text: `\`\`\`\n${error}\n\`\`\``,
-                },
-              });
-              throw error;
+            if (violators.length > 0) {
+              core.setFailed(
+                `Blocked: ${violators.length} approval(s) from committers — ${violators.map(u => `@${u}`).join(', ')}. ` +
+                'A PR must be approved by someone who has not committed to the branch.'
+              );
+            } else {
+              const msg = approvals.size > 0
+                ? `Passed: ${approvals.size} valid approval(s) from non-committers`
+                : 'Passed: awaiting review from a non-committer';
+              core.info(msg);
             }
