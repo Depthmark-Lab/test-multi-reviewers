@@ -1,0 +1,48 @@
+# This workflow is an ALTERNATIVE to running the Probot app as a standalone
+# GitHub App server. It runs the same check logic as a GitHub Actions workflow
+# using the probot/adapter-github-actions adapter.
+#
+# Choose ONE deployment method:
+#   A) Standalone Probot server (recommended) — deploy src/index.ts as a service
+#   B) GitHub Actions (this file) — runs in CI on every PR event
+#
+# If using method A (standalone server), you can DELETE this workflow file.
+
+name: Review Integrity Check
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+
+permissions:
+  checks: write
+  pull-requests: read
+  contents: read
+
+jobs:
+  review-integrity:
+    name: Review Integrity
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run review-integrity check
+        uses: probot/adapter-github-actions@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,39 @@
+{
+  "name": "check-reviewer-no-commit",
+  "version": "1.0.0",
+  "description": "A GitHub App that ensures PR approvers have not committed to the branch",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "probot run ./dist/index.js",
+    "dev": "npx ts-node src/index.ts",
+    "lint": "eslint src/",
+    "test": "jest && npm run test:helm",
+    "test:unit": "jest",
+    "test:helm": "helm unittest helm/check-reviewer-no-commit"
+  },
+  "keywords": [
+    "probot",
+    "github",
+    "probot-app",
+    "check-run",
+    "pull-request",
+    "code-review"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "probot": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20.0.0",
+    "jest": "^30.3.0",
+    "nock": "^14.0.11",
+    "ts-jest": "^29.4.6",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

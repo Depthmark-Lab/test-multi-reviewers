@@ -1,0 +1,126 @@
+suite: deployment
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: should render a Deployment
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: should use the correct image
+    set:
+      image.repository: ghcr.io/depthmark/check-reviewer-no-commit
+      image.tag: v1.2.3
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: "ghcr.io/depthmark/check-reviewer-no-commit:v1.2.3"
+
+  - it: should set replica count
+    set:
+      replicaCount: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  - it: should inject env vars from secret
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: APP_ID
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-check-reviewer-no-commit
+                key: APP_ID
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: WEBHOOK_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-check-reviewer-no-commit
+                key: WEBHOOK_SECRET
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: PRIVATE_KEY
+            valueFrom:
+              secretKeyRef:
+                name: RELEASE-NAME-check-reviewer-no-commit
+                key: PRIVATE_KEY
+
+  - it: should use existing secret when set
+    set:
+      app.existingSecret: my-external-secret
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: APP_ID
+            valueFrom:
+              secretKeyRef:
+                name: my-external-secret
+                key: APP_ID
+
+  - it: should add extra env vars
+    set:
+      env:
+        LOG_LEVEL: debug
+        NODE_ENV: production
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LOG_LEVEL
+            value: "debug"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NODE_ENV
+            value: "production"
+
+  - it: should set resource limits
+    set:
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 500m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 512Mi
+
+  - it: should expose container port 3000
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: http
+            containerPort: 3000
+            protocol: TCP
+
+  - it: should configure liveness probe
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /probot
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: http
+
+  - it: should configure readiness probe
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /probot
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: http

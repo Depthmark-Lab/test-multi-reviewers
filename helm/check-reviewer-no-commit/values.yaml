@@ -1,0 +1,72 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/depthmark/check-reviewer-no-commit
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+service:
+  type: ClusterIP
+  port: 3000
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: check-reviewer-no-commit.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+    # - secretName: check-reviewer-no-commit-tls
+    #   hosts:
+    #     - check-reviewer-no-commit.example.com
+
+# GitHub App credentials — provide via --set or an existing secret
+app:
+  # Inline values (used if existingSecret is empty)
+  appId: ""
+  webhookSecret: ""
+  privateKey: ""
+
+  # Reference an existing Kubernetes secret instead of creating one
+  # The secret must contain keys: APP_ID, WEBHOOK_SECRET, PRIVATE_KEY
+  existingSecret: ""
+
+env: {}
+  # LOG_LEVEL: debug
+  # NODE_ENV: production
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+podAnnotations: {}
+podLabels: {}
+
+livenessProbe:
+  httpGet:
+    path: /probot
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 30
+
+readinessProbe:
+  httpGet:
+    path: /probot
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10

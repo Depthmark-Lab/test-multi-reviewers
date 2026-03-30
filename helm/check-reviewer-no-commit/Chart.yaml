@@ -1,0 +1,6 @@
+apiVersion: v2
+name: check-reviewer-no-commit
+description: GitHub App that ensures PR approvers have not committed to the branch
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
